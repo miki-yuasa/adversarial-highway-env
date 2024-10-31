@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "adversarial-highway-env"
+version = "0.1.0"
+description = "Gymnasium highway environements that come with adversarial dynamics"
+authors = ["Mikihisa Yuasa <myuasa2@illinois.edu>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+highway-env = "^1.10.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
