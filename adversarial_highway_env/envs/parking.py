@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import Optional, Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -228,7 +228,7 @@ class AdversarialParkingEnv(ParkingEnv):
 
 
 class KinematicGoalVehiclesObservation(KinematicsGoalObservation):
-    def __init__(self, env: AbstractEnv, scales: List[float], **kwargs: dict) -> None:
+    def __init__(self, env: AbstractEnv, scales: list[float], **kwargs: dict) -> None:
         super().__init__(env, scales, **kwargs)
         self.vehicles_count: int = (
             env.config["vehicles_count"] + env.config["controlled_vehicles"]
@@ -316,7 +316,7 @@ class RandomVehicle(Vehicle):
     ):
         super().__init__(road, position, heading, speed, predition_type)
 
-    def act(self, action: Union[dict, str] = None) -> None:
+    def act(self, action: dict[str, Any] | str | None = None) -> None:
         """
         Store an action to be repeated.
 
