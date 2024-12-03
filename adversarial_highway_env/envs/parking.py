@@ -195,6 +195,10 @@ class AdversarialParkingEnv(ParkingEnv):
         obs = self.observation_type_parking.observe()
         success = self._is_success(achieved_goal, obs["desired_goal"])
         info.update({"is_success": success})
+
+        num_crashed = sum(v.crashed for v in self.controlled_vehicles)
+        info.update({"num_crashed": num_crashed})
+
         return info
 
     def _reward(self, action: np.ndarray) -> float:
@@ -209,6 +213,40 @@ class AdversarialParkingEnv(ParkingEnv):
         #     reward += 0.12
 
         return reward
+
+    def compute_reward(
+        self,
+        achieved_goal: np.ndarray,
+        desired_goal: np.ndarray,
+        info: dict[str, Any] | list[dict[str, Any]],
+        p: float = 0.5,
+    ) -> float:
+        """
+        Add # of crashed vehicles to the achieved goal and desired goal.
+        Also
+        Proximity to the goal is rewarded
+
+        We use a weighted p-norm
+
+        :param achieved_goal: the goal that was achieved
+        :param desired_goal: the goal that was desired
+        :param dict info: any supplementary information
+        :param p: the Lp^p norm used in the reward. Use p<1 to have high kurtosis for rewards in [0, 1]
+        :return: the corresponding reward
+        """
+        rewards = -np.power(
+            np.dot(
+                np.abs(achieved_goal - desired_goal),
+                np.array(self.config["reward_weights"]),
+            ),
+            p,
+        )
+
+        if isinstance(info, dict):
+            if info.get("is_success"):
+                rewards += self.config["success_goal_reward"]
+
+        return rewards
 
     def _is_terminated(self) -> bool:
         """The episode is over if the ego vehicle crashed or the goal is reached or time is over."""
