@@ -1,4 +1,4 @@
-from typing import Optional, Any
+from typing import Callable, Optional, Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -7,12 +7,13 @@ import gymnasium as gym
 from gymnasium import spaces
 
 from highway_env.envs.common.abstract import AbstractEnv
-from highway_env.envs.common.action import action_factory
+from highway_env.envs.common.action import action_factory, ContinuousAction
 from highway_env.envs.common.graphics import EnvViewer
 from highway_env.envs.common.observation import KinematicsGoalObservation
 from highway_env.envs.parking_env import ParkingEnv
 from highway_env.road.road import Road
 from highway_env.utils import Vector
+from highway_env.vehicle.controller import MDPVehicle
 from highway_env.vehicle.graphics import VehicleGraphics
 from highway_env.vehicle.kinematics import Vehicle
 from highway_env.vehicle.objects import Landmark, Obstacle
@@ -31,12 +32,12 @@ class AdversarialParkingEnv(ParkingEnv):
             {
                 "observation": {
                     "type": "KinematicsGoal",
-                    "features": ["x", "y", "vx", "vy", "cos_h", "sin_h"],
-                    "scales": [100, 100, 5, 5, 1, 1],
+                    "features": ["x", "y", "vx", "vy", "cos_h", "sin_h", "crashed"],
+                    "scales": [100, 100, 5, 5, 1, 1, 1],
                     "normalize": False,
                 },
                 "action": {"type": "ContinuousAction"},
-                "reward_weights": [1, 0.3, 0, 0, 0.02, 0.02],
+                "reward_weights": [1, 0.3, 0, 0, 0.02, 0.02, 0],
                 "success_goal_reward": 0.12,
                 "collision_reward": -5,
                 "steering_range": np.deg2rad(45),
@@ -65,7 +66,7 @@ class AdversarialParkingEnv(ParkingEnv):
         self.observation_type = KinematicGoalVehiclesObservation(
             self, **self.config["observation"]
         )
-        self.action_type = action_factory(self, self.config["action"])
+        self.action_type = CollisionContinuousAction(self, **self.config["action"])
         self.observation_space = self.observation_type.space()
         self.action_space = self.action_type.space()
         self.observation_type_parking = KinematicGoalVehiclesObservation(
@@ -339,6 +340,43 @@ class KinematicGoalVehiclesObservation(KinematicsGoalObservation):
             "desired_goal": goal / self.scales,
         }
         return obs
+
+
+class CollisionContinuousAction(ContinuousAction):
+    @property
+    def vehicle_class(self) -> Callable:
+        veh: type[Vehicle] = super().vehicle_class
+
+        def to_dict(
+            self: type[Vehicle], origin_vehicle=None, observe_intentions=True
+        ) -> dict[str, Any]:
+            d = {
+                "presence": 1,
+                "x": self.position[0],
+                "y": self.position[1],
+                "vx": self.velocity[0],
+                "vy": self.velocity[1],
+                "heading": self.heading,
+                "cos_h": self.direction[0],
+                "sin_h": self.direction[1],
+                "cos_d": self.destination_direction[0],
+                "sin_d": self.destination_direction[1],
+                "long_off": self.lane_offset[0],
+                "lat_off": self.lane_offset[1],
+                "ang_off": self.lane_offset[2],
+                "crashed": int(self.crashed),
+            }
+            if not observe_intentions:
+                d["cos_d"] = d["sin_d"] = 0
+            if origin_vehicle:
+                origin_dict = origin_vehicle.to_dict()
+                for key in ["x", "y", "vx", "vy"]:
+                    d[key] -= origin_dict[key]
+            return d
+
+        veh.to_dict = to_dict
+
+        return veh
 
 
 class RandomVehicle(Vehicle):
