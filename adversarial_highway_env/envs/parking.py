@@ -206,9 +206,9 @@ class AdversarialParkingEnv(ParkingEnv):
         obs = self.observation_type_parking.observe()
         # obs = obs if isinstance(obs, tuple) else (obs,)
         reward = self.compute_reward(obs["achieved_goal"], obs["desired_goal"], {})
-        reward += self.config["collision_reward"] * sum(
-            v.crashed for v in self.controlled_vehicles
-        )
+        # reward += self.config["collision_reward"] * sum(
+        #     v.crashed for v in self.controlled_vehicles
+        # )
 
         # if self.goal.hit:
         #     reward += 0.12
@@ -235,19 +235,27 @@ class AdversarialParkingEnv(ParkingEnv):
         :param p: the Lp^p norm used in the reward. Use p<1 to have high kurtosis for rewards in [0, 1]
         :return: the corresponding reward
         """
-        rewards = -np.power(
+        achieved_goal = achieved_goal.reshape(-1, len(self.config["reward_weights"]))
+        desired_goal = desired_goal.reshape(-1, len(self.config["reward_weights"]))
+        kin_achieved_goal = achieved_goal[:, :-1]
+        kin_desired_goal = desired_goal[:, :-1]
+        rewards: NDArray[np.float64] = -np.power(
             np.dot(
-                np.abs(achieved_goal - desired_goal),
-                np.array(self.config["reward_weights"]),
+                np.abs(kin_achieved_goal - kin_desired_goal),
+                np.array(self.config["reward_weights"][:-1]),
             ),
             p,
         )
 
-        if isinstance(info, dict):
-            if info.get("is_success"):
-                rewards += self.config["success_goal_reward"]
+        # The last column is for the number of crashed vehicles
+        rewards -= self.config["reward_weights"][-1] * (
+            achieved_goal[:, -1] - desired_goal[:, -1]
+        )
 
-        return rewards
+        if rewards.size == 1:
+            return rewards.item()
+        else:
+            return rewards
 
     def _is_terminated(self) -> bool:
         """The episode is over if the ego vehicle crashed or the goal is reached or time is over."""
@@ -317,7 +325,6 @@ class KinematicGoalVehiclesObservation(KinematicsGoalObservation):
         origin = self.observer_vehicle
         all_df = pd.concat(
             [
-                # ego_df,
                 pd.DataFrame.from_records(
                     [
                         v.to_dict(origin, observe_intentions=False)
@@ -331,6 +338,8 @@ class KinematicGoalVehiclesObservation(KinematicsGoalObservation):
         veh_obs: NDArray[np.float64] = all_df[self.features].to_numpy(dtype=np.float64)
 
         ego_obs: NDArray[np.float64] = np.ravel(ego_df)
+        num_crashed = sum(v.crashed for v in self.env.controlled_vehicles)
+        ego_obs[-1] = num_crashed
         goal: NDArray[np.float64] = np.ravel(
             pd.DataFrame.from_records([self.env.goal.to_dict()])[self.features]
         )
@@ -348,7 +357,9 @@ class CollisionContinuousAction(ContinuousAction):
         veh: type[Vehicle] = super().vehicle_class
 
         def to_dict(
-            self: type[Vehicle], origin_vehicle=None, observe_intentions=True
+            self: type[Vehicle],
+            origin_vehicle: type[Vehicle] | None = None,
+            observe_intentions: bool = True,
         ) -> dict[str, Any]:
             d = {
                 "presence": 1,
@@ -431,5 +442,6 @@ class CustomLandmark(Landmark):
     def to_dict(self, origin_vehicle=None, observe_intentions=True):
         d = super().to_dict(origin_vehicle, observe_intentions)
         d["heading"] = self.heading
+        d["crashed"] = 0
 
         return d
