@@ -37,20 +37,21 @@ class AdversarialParkingEnv(ParkingEnv):
                     "normalize": False,
                 },
                 "action": {"type": "ContinuousAction"},
-                "reward_weights": [1, 0.3, 0, 0, 0.02, 0.02, 0],
-                "success_goal_reward": 0.12,
+                "reward_weights": [1, 0.2, 0, 0, 0.1, 0.1],
+                "success_goal_reward": 0.05,
                 "collision_reward": -5,
                 "steering_range": np.deg2rad(45),
                 "simulation_frequency": 15,
                 "policy_frequency": 5,
-                "duration": 100,
+                "duration": 50,
                 "screen_width": 600,
                 "screen_height": 300,
                 "screen_center": "centering_position",
                 "centering_position": [0.5, 0.5],
                 "scaling": 7,
                 "controlled_vehicles": 1,
-                "vehicles_count": 10,
+                "vehicles_count": 0,
+                "adversarial_vehicle": True,
                 "add_walls": True,
                 "adversarial_vehicle_spawn_config": [
                     {"spawn_point": [-30, 4], "heading": 0, "speed": 5},
@@ -206,9 +207,9 @@ class AdversarialParkingEnv(ParkingEnv):
         obs = self.observation_type_parking.observe()
         # obs = obs if isinstance(obs, tuple) else (obs,)
         reward = self.compute_reward(obs["achieved_goal"], obs["desired_goal"], {})
-        reward += self.config["collision_reward"] * sum(
-            v.crashed for v in self.controlled_vehicles
-        )
+        # reward += self.config["collision_reward"] * sum(
+        #     v.crashed for v in self.controlled_vehicles
+        # )
 
         # if self.goal.hit:
         #     reward += 0.12
@@ -235,19 +236,31 @@ class AdversarialParkingEnv(ParkingEnv):
         :param p: the Lp^p norm used in the reward. Use p<1 to have high kurtosis for rewards in [0, 1]
         :return: the corresponding reward
         """
-        rewards = -np.power(
+        achieved_goal: NDArray[np.float64] = achieved_goal.reshape(
+            -1, len(self.config["features"])
+        )
+        desired_goal: NDArray[np.float64] = desired_goal.reshape(
+            -1, len(self.config["features"])
+        )
+        kin_achieved_goal = achieved_goal[:, :-1]
+        kin_desired_goal = desired_goal[:, :-1]
+        rewards: NDArray[np.float64] = -np.power(
             np.dot(
-                np.abs(achieved_goal - desired_goal),
+                np.abs(kin_achieved_goal - kin_desired_goal),
                 np.array(self.config["reward_weights"]),
             ),
             p,
         )
 
-        if isinstance(info, dict):
-            if info.get("is_success"):
-                rewards += self.config["success_goal_reward"]
+        # The last column is for the number of crashed vehicles
+        rewards += self.config["collision_reward"] * (
+            achieved_goal[:, -1] - desired_goal[:, -1]
+        )
 
-        return rewards
+        if rewards.size == 1:
+            return rewards.item()
+        else:
+            return rewards
 
     def _is_terminated(self) -> bool:
         """The episode is over if the ego vehicle crashed or the goal is reached or time is over."""
@@ -317,7 +330,6 @@ class KinematicGoalVehiclesObservation(KinematicsGoalObservation):
         origin = self.observer_vehicle
         all_df = pd.concat(
             [
-                # ego_df,
                 pd.DataFrame.from_records(
                     [
                         v.to_dict(origin, observe_intentions=False)
@@ -348,7 +360,9 @@ class CollisionContinuousAction(ContinuousAction):
         veh: type[Vehicle] = super().vehicle_class
 
         def to_dict(
-            self: type[Vehicle], origin_vehicle=None, observe_intentions=True
+            self: type[Vehicle],
+            origin_vehicle: type[Vehicle] | None = None,
+            observe_intentions: bool = True,
         ) -> dict[str, Any]:
             d = {
                 "presence": 1,
@@ -431,5 +445,6 @@ class CustomLandmark(Landmark):
     def to_dict(self, origin_vehicle=None, observe_intentions=True):
         d = super().to_dict(origin_vehicle, observe_intentions)
         d["heading"] = self.heading
+        d["crashed"] = 0
 
         return d
