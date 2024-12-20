@@ -237,10 +237,10 @@ class AdversarialParkingEnv(ParkingEnv):
         :return: the corresponding reward
         """
         achieved_goal: NDArray[np.float64] = achieved_goal.reshape(
-            -1, len(self.config["features"])
+            -1, len(self.config["observation"]["features"])
         )
         desired_goal: NDArray[np.float64] = desired_goal.reshape(
-            -1, len(self.config["features"])
+            -1, len(self.config["observation"]["features"])
         )
         kin_achieved_goal = achieved_goal[:, :-1]
         kin_desired_goal = desired_goal[:, :-1]
