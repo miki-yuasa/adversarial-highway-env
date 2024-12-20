@@ -37,20 +37,21 @@ class AdversarialParkingEnv(ParkingEnv):
                     "normalize": False,
                 },
                 "action": {"type": "ContinuousAction"},
-                "reward_weights": [1, 0.3, 0, 0, 0.02, 0.02, 0],
-                "success_goal_reward": 0.12,
+                "reward_weights": [1, 0.2, 0, 0, 0.1, 0.1],
+                "success_goal_reward": 0.05,
                 "collision_reward": -5,
                 "steering_range": np.deg2rad(45),
                 "simulation_frequency": 15,
                 "policy_frequency": 5,
-                "duration": 100,
+                "duration": 50,
                 "screen_width": 600,
                 "screen_height": 300,
                 "screen_center": "centering_position",
                 "centering_position": [0.5, 0.5],
                 "scaling": 7,
                 "controlled_vehicles": 1,
-                "vehicles_count": 10,
+                "vehicles_count": 0,
+                "adversarial_vehicle": True,
                 "add_walls": True,
                 "adversarial_vehicle_spawn_config": [
                     {"spawn_point": [-30, 4], "heading": 0, "speed": 5},
@@ -235,20 +236,24 @@ class AdversarialParkingEnv(ParkingEnv):
         :param p: the Lp^p norm used in the reward. Use p<1 to have high kurtosis for rewards in [0, 1]
         :return: the corresponding reward
         """
-        achieved_goal = achieved_goal.reshape(-1, len(self.config["reward_weights"]))
-        desired_goal = desired_goal.reshape(-1, len(self.config["reward_weights"]))
+        achieved_goal: NDArray[np.float64] = achieved_goal.reshape(
+            -1, len(self.config["features"])
+        )
+        desired_goal: NDArray[np.float64] = desired_goal.reshape(
+            -1, len(self.config["features"])
+        )
         kin_achieved_goal = achieved_goal[:, :-1]
         kin_desired_goal = desired_goal[:, :-1]
         rewards: NDArray[np.float64] = -np.power(
             np.dot(
                 np.abs(kin_achieved_goal - kin_desired_goal),
-                np.array(self.config["reward_weights"][:-1]),
+                np.array(self.config["reward_weights"]),
             ),
             p,
         )
 
         # The last column is for the number of crashed vehicles
-        rewards -= self.config["reward_weights"][-1] * (
+        rewards += self.config["collision_reward"] * (
             achieved_goal[:, -1] - desired_goal[:, -1]
         )
 
@@ -338,8 +343,6 @@ class KinematicGoalVehiclesObservation(KinematicsGoalObservation):
         veh_obs: NDArray[np.float64] = all_df[self.features].to_numpy(dtype=np.float64)
 
         ego_obs: NDArray[np.float64] = np.ravel(ego_df)
-        num_crashed = sum(v.crashed for v in self.env.controlled_vehicles)
-        ego_obs[-1] = num_crashed
         goal: NDArray[np.float64] = np.ravel(
             pd.DataFrame.from_records([self.env.goal.to_dict()])[self.features]
         )
