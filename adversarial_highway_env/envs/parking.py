@@ -272,7 +272,7 @@ class AdversarialParkingEnv(ParkingEnv):
             for agent_obs in obs
         )
 
-        return bool(crashed or success)
+        return success  # bool(crashed or success)
 
     def _is_truncated(self) -> bool:
         """The episode is truncated if the time is over."""
