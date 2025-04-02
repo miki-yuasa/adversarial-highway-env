@@ -50,14 +50,14 @@ class AdversarialParkingEnv(ParkingEnv):
                 "centering_position": [0.5, 0.5],
                 "scaling": 7,
                 "controlled_vehicles": 1,
-                "vehicles_count": 0,
-                "adversarial_vehicle": True,
+                "parked_vehicles_count": 0,
+                "adversarial_vehicles_count": 1,
                 "add_walls": True,
                 "adversarial_vehicle_spawn_config": [
-                    {"spawn_point": [-30, 4], "heading": 0, "speed": 5},
-                    {"spawn_point": [-30, -4], "heading": 0, "speed": 5},
-                    {"spawn_point": [30, -4], "heading": np.pi, "speed": 5},
-                    {"spawn_point": [30, -4], "heading": np.pi, "speed": 5},
+                    {"spawn_point": [-30, 4], "heading": 0, "speed": 3},
+                    {"spawn_point": [-30, -4], "heading": 0, "speed": 3},
+                    {"spawn_point": [30, -4], "heading": np.pi, "speed": 3},
+                    {"spawn_point": [30, -4], "heading": np.pi, "speed": 3},
                 ],
             }
         )
@@ -109,7 +109,7 @@ class AdversarialParkingEnv(ParkingEnv):
             ("b", "c", 10),
             ("b", "c", 1),
         ]
-        for i in range(self.config["vehicles_count"]):
+        for i in range(self.config["parked_vehicles_count"]):
             while True:
                 lane_id = self.np_random.choice(
                     range(0, int(len(self.road.network.lanes_list()) / 2))
@@ -283,7 +283,9 @@ class KinematicGoalVehiclesObservation(KinematicsGoalObservation):
     def __init__(self, env: AbstractEnv, scales: list[float], **kwargs: dict) -> None:
         super().__init__(env, scales, **kwargs)
         self.vehicles_count: int = (
-            env.config["vehicles_count"] + env.config["controlled_vehicles"]
+            env.config["parked_vehicles_count"]
+            + env.config["controlled_vehicles"]
+            + env.config["adversarial_vehicles_count"]
         )
 
     def space(self) -> spaces.Space:
@@ -340,6 +342,7 @@ class KinematicGoalVehiclesObservation(KinematicsGoalObservation):
             ]
         )
 
+        # change the observation to include the distance between the ego vehicle and the other vehicles
         veh_obs: NDArray[np.float64] = all_df[self.features].to_numpy(dtype=np.float64)
 
         ego_obs: NDArray[np.float64] = np.ravel(ego_df)
